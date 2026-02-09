@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AlertCircle } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -16,10 +17,10 @@ export default function Login() {
   const navigate=useNavigate();
 
   const [errors, setErrors] = useState({});
+  const [authError, setAuthError] = useState("");
 
   const handleChange = (e) => {
-    
-     
+    setAuthError("");
     setFormData((prev) => ({
       ...prev,
       [e.target.id]:e.target.value,
@@ -50,7 +51,7 @@ export default function Login() {
     console.log("Login data:", formData);
 
     try {
-      const response = await fetch(import.meta.env.VITE_API_BASE_URL+'/api/users/login', {
+      const response = await fetch(import.meta.env.VITE_API_BASE_URL+'/api/auth/login', {
         method: 'POST',
         credentials:"include",
         headers: {
@@ -59,14 +60,20 @@ export default function Login() {
         body: JSON.stringify(formData)
       });
 
+      if (response.status === 401) {
+        setAuthError("Invalid email or password");
+        return;
+      }
+
       if (!response.ok) {
         throw new Error('Something went wrong');
       }
 
       const result = await response.json();
+      setAuthError("");
 
       setMessage('User successfully logged in!');
-      navigate("/dashboard")
+      navigate("/")
       console.log(result);
     } catch (error) {
       setMessage('Error posting data');
@@ -120,6 +127,12 @@ export default function Login() {
             <Button type="submit" className="w-full">
               Login
             </Button>
+            {authError && (
+              <div className="flex items-center gap-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span className="font-medium">{authError}</span>
+              </div>
+            )}
             <div className="text-center">
               <button
                 type="button"

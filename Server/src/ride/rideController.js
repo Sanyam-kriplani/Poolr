@@ -1,20 +1,26 @@
-import Ride from "../models/rideModel.js";
-import Booking from "../models/bookingModel.js";
+import Ride from "./rideModel.js";
+import Booking from "../booking/bookingModel.js";
 import mongoose from "mongoose";
-import Location from "../models/locationModel.js";
+import Location from "../location/locationModel.js";
 import {sendMail} from "../utils/composeMail.js"
-import User from "../models/userModel.js"
-
+import User from "../user/userModel.js"
+import { getOptimizedRoute } from "../services/orsService.js";
+import polyline from "@mapbox/polyline";
+import { createCircle } from "../utils/createDraw.js";
+import { sampleRoutePoints } from "../utils/geo/sampleRoutePoints.js";
+import { detectStops } from "../utils/geo/detectStops.js";
+import { raw } from "express";
+import { waypointSchema } from "./rideWaypointSchema.js";
+import { createSegmentsFromWaypoints } from "../utils/geo/createSegments.js";
+import { findNearestWpRouteIndex } from "./findNearestWpIndex.js";
+import { reverseGeocode } from "../utils/geo/reverseGeocode.js";
 
 export const ridePublisher= async(req,res)=>{
  try {
 
-    const driverId=req.user_id;
-    const {vehicleId,source,destination,departureDateTime,totalAvailableSeats,pricePerSeat}=req.body;
+    const driverId=req.session.userId;
+    const {vehicleId,source,destination,departureDateTime,totalAvailableSeats,pricePerSeat,routePolyline,duration,distance,waypoints}=req.body;
 
-
-    console.log(req.body.vehicleId);
-    console.log(req.body.departureDateTime);
 
     if (
         !driverId ||
@@ -22,6 +28,10 @@ export const ridePublisher= async(req,res)=>{
         !source ||
         !destination ||
         !departureDateTime || 
+        !routePolyline ||
+        !waypoints ||
+        !duration ||
+        !distance ||
         totalAvailableSeats === undefined ||
         pricePerSeat === undefined
         ) {
@@ -56,7 +66,7 @@ export const ridePublisher= async(req,res)=>{
                 }
                 })
         if (existingRide) {
-         if(existingRide.source===source && existingRide.destination===destination){
+         if(existingRide.source.name ===source.name && existingRide.destination.name === destination.name){
              return res.status(400).json({ message: "Ride already exists" });
          }
          else{
@@ -64,7 +74,7 @@ export const ridePublisher= async(req,res)=>{
          }
         }
 
-        // prevent publishing a ride if user already has a confirmed booking within ±1 hour
+        // prevent publishing a ride if user already has a confirmed booking within +-1 hour
         const confirmedBooking = await Booking.findOne({
           passengerId: driverId,
           status: "confirmed",
@@ -82,24 +92,164 @@ export const ridePublisher= async(req,res)=>{
           });
         }
         
+        if (!routePolyline) {
+          return res.status(400).json({
+            message: "routePolyline is required",
+          });
+        }
+        
+        
+
+        // Decode polyline → [[lat, lng], [lat, lng], ...]
+        const decoded = polyline.decode(routePolyline);
+        
+      
+        // Convert to GeoJSON format → [[lng, lat], ...]
+        const coordinates = decoded.map(([lat, lng]) => [lng, lat]);
+
+        if(coordinates.length===0){
+          return res.status(400).json({
+            message:"route not found"
+          })
+        }
+
+        const route = {
+          type: "LineString",
+          coordinates,
+        };
+        
+        const normalizedWaypoints = waypoints.map((wp, i) => ({
+            index: i, // ✅ ordinal position
+            name: wp.name,
+            location: wp.location,
+            routePointIndex: wp.routePointIndex,
+        }));
+       
+        console.log(normalizedWaypoints);
+        
+        const segments = createSegmentsFromWaypoints(normalizedWaypoints,route.coordinates,totalAvailableSeats);
+
+
+        
         const newRide = new Ride({
         driverId,
         vehicleId,
         source,
+        route,
+        waypoints:normalizedWaypoints,
+        segments,
+        duration,
+        distance,
         destination,
         departureDateTime,
         totalAvailableSeats:Number(totalAvailableSeats),
         pricePerSeat:Number(pricePerSeat),        
-        });
-
-
+        });     
+        
         const savedRide = await newRide.save();
         
         res.status(201).json({ message: "Ride created successfully",ride: savedRide });
     } catch (error) {
-     res.status(500).json({ message: "Error creating ride", });
+     res.status(500).json({ message: "Error creating ride",Error:error.message });
  }
 }
+
+export const getRideRoute = async (req, res) => {
+  try {
+    const { source, destination } = req.body;
+
+    if (
+      !source ||
+      !destination ||
+      !source.location?.coordinates ||
+      !destination.location?.coordinates
+    ) {
+      return res.status(400).json({
+        message: "source and destination coordinates are required",
+      });
+    }
+
+    const sourceCoords = source.location.coordinates;       // [lng, lat]
+    const destinationCoords = destination.location.coordinates;
+
+    const routeData = await getOptimizedRoute(
+      sourceCoords,
+      destinationCoords
+    );
+
+    const coordinates = routeData.geometry.coordinates; // [[lng,lat],...]
+
+    // polyline needs [lat, lng]
+    const latLngArray = coordinates.map(([lng, lat]) => [
+      lat,
+      lng,
+    ]);
+
+    const encodedPolyline = polyline.encode(latLngArray);
+
+    return res.status(200).json({
+      polyline: encodedPolyline,
+      distance: routeData.properties.summary.distance, // meters
+      duration: routeData.properties.summary.duration, // seconds
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Error generating route",
+      error: error.message,
+    });
+  }
+};
+
+export const getRouteWaypoints = async (req , res) => {
+
+  try {
+    
+   const {source, destination, routePolyline}=req.body;
+
+   
+   const nonGeoJSONRoute = polyline.decode(routePolyline) ;
+
+   const GeoJSONRoute = (polyline) => ({
+   coordinates: polyline.map(([lat, lng]) => [lng, lat]),
+   });
+ 
+   const route = GeoJSONRoute(nonGeoJSONRoute);
+
+   const sampledPoints = sampleRoutePoints(route.coordinates);
+
+   
+   const detectedStops= await detectStops(sampledPoints,5)
+   
+   console.log(detectedStops);
+
+   const rawWayPoints = [
+    {
+      name:source.name,
+      location:source.location,
+      routePointIndex:0
+    },
+    ...detectedStops,
+    {
+      name:destination.name,
+      location:destination.location,
+      routePointIndex:route.coordinates.length - 1
+    }
+   ];
+
+   rawWayPoints.sort((a,b) => a.routePointIndex - b.routePointIndex );
+
+
+   return res.status(200).json({
+    waypoints:rawWayPoints
+   })
+  } catch (error) {
+    return res.status(500).json({
+      message:"Error fetching waypoints",
+      Error:error.message
+    })
+  }  
+};
 
 export const rideUpdater= async(req,res)=>{
     try {
@@ -110,7 +260,7 @@ export const rideUpdater= async(req,res)=>{
         if (!mongoose.Types.ObjectId.isValid(rideId)) {
         return res.status(400).json({ message: "Invalid rideId" });
         }
-        const userId=req.user_id;
+        const userId=req.session.userId;
     
         const ride = await Ride.findOne({
         _id: rideId,
@@ -120,7 +270,7 @@ export const rideUpdater= async(req,res)=>{
         if(!ride){
            return res.status(404).json({message:"Ride not found"});
         }
-        const { pricePerSeat, departureTime, totalAvailableSeats, source, destination } = req.body;
+        const { pricePerSeat, departureDateTime, totalAvailableSeats } = req.body;
 
         if(ride.passengers.length!==0){
             return res.status(400).json({
@@ -130,8 +280,8 @@ export const rideUpdater= async(req,res)=>{
         if (pricePerSeat !== undefined) {
           ride.pricePerSeat = Number(pricePerSeat);
         }     
-        if (departureTime) {
-          const parsedDepartureTime = new Date(departureTime);
+        if (departureDateTime) {
+          const parsedDepartureTime = new Date(departureDateTime);
 
           if (isNaN(parsedDepartureTime.getTime())) {
             return res.status(400).json({ message: "Invalid departure time format" });
@@ -164,12 +314,6 @@ export const rideUpdater= async(req,res)=>{
           }
 
           ride.departureDateTime = parsedDepartureTime;
-        }
-        if(source){
-            ride.source=source;
-        }
-        if (destination) {
-          ride.destination = destination;
         }  
         if (totalAvailableSeats !== undefined && totalAvailableSeats < 1) {
         return res.status(400).json({ message: "Seats must be atleast 1" });
@@ -192,7 +336,7 @@ export const rideUpdater= async(req,res)=>{
 export const rideCancellar=async (req,res)=>{
     try {
         const rideId=req.body._id;
-        const userId=req.user_id;
+        const userId=req.session.userId;
     
         if (!rideId) {
             return res.status(400).json({ message: "rideId is required" });
@@ -214,8 +358,8 @@ export const rideCancellar=async (req,res)=>{
         
         
 
-        const pickup=await Location.findOne({city:ride.source});
-        const drop=await Location.findOne({city:ride.destination});
+        const pickup=await Location.findOne({city:ride.source.name});
+        const drop=await Location.findOne({city:ride.destination.name});
 
         const passengers=ride.passengers;
 
@@ -268,43 +412,147 @@ await ride.save();
     }
 }
 
-export const searchRides=async(req,res)=>{
-    try {
-        const { source, destination, seatsRequired, departureDate } = req.query;
-        const userId=req.user_id;
-        if(!source || !destination || !seatsRequired || !departureDate){
-            return res.status(400).json({
-                message:"Required fields are missing"
-            })
-        }
-    
-      const searchDate = new Date(departureDate);
-      searchDate.setHours(0, 0, 0, 0);
+export const searchRides = async (req, res) => {
+  try {
+    const { source, destination, seatsRequired, departureDate } = req.body;
+    const userId = req.session.userId;
 
-      const rides = await Ride.find({
-        source,
-        destination,
-        status: "upcoming",
-        driverId: { $ne: userId },
-        totalAvailableSeats: { $gte: Number(seatsRequired) },
-        departureDateTime: { $gte: searchDate }
-      })
-      .populate({
-        path: "driverId",
-        select: "name age email phone_no rating profile_photo"
+    if (!source || !destination || !seatsRequired || !departureDate) {
+      return res.status(400).json({
+        message: "Required fields are missing",
       });
+    }
 
-       if(rides.length===0){
-        return res.status(200).json([])
-       }
-    
-       return res.status(200).json(rides)
+    const today = new Date();
+    today.setSeconds(0, 0);
 
+    const searchDate = new Date(departureDate);
+    searchDate.setHours(0, 0, 0, 0);
+
+     // if searching for today, start from NOWW
+    const lowerBound =
+    searchDate.toDateString() === today.toDateString()
+    ? today
+    : searchDate;
+//============== making a tolerance of 2 km around destination ==================
+    const dropBuffer = {
+        type: "Polygon",
+        coordinates: [
+          createCircle(destination.location.coordinates, 2000) // 2 km tolerance
+        ]
+      };
+
+    const candidateRides = await Ride.aggregate([
+      {
+        $geoNear:{
+          near:{
+            type:"Point",
+            coordinates:source.location.coordinates
+          },
+          key:"route",
+          distanceField:"distanceFromSource",
+          maxDistance:5000, //5KM
+          spherical:true,
+          query:{
+            status:"upcoming",
+            driverId:{$ne:userId},
+            totalAvailableSeats:{$gte:Number(seatsRequired)},
+            departureDateTime:{$gte:lowerBound},
+          }
+        },
+      },
+      {
+        $match:{
+          route:{
+            $geoIntersects:{
+              $geometry: dropBuffer
+            }
+          }
+        }
+      },
+      {
+        $lookup:{
+          from:"users",
+          localField:"driverId",
+          foreignField:"_id",
+          as:"driver",
+        }
+      },
+      {
+        $unwind: {
+        path: "$driver",
+        preserveNullAndEmptyArrays: false
+      }
+      },
+      {
+      $sort:{ distanceFromSource: 1}
+      },
+      {
+        $project:{
+          "driver.password":0
+        }
+      }
+    ]);
+
+// ============ filtering on the basis of seat availability for overlapping segments========
+    const validrides = [];
+    for(const ride of candidateRides){
+     
+      const pickIndex = findNearestWpRouteIndex(ride.waypoints, source.location.coordinates);
+
+      
+      const dropIndex =findNearestWpRouteIndex(ride.waypoints, destination.location.coordinates);
+      console.log(pickIndex,dropIndex);
+
+      if(pickIndex > dropIndex) continue;
+
+      const usableSegments=ride.segments.filter(seg =>
+              seg.fromIndex >= pickIndex && 
+              seg.toIndex <= dropIndex
+            );
+      
+      const askedDist=usableSegments.reduce((acc,seg)=>(acc + seg.distance),0);
+      
+      const cost=Math.ceil((askedDist / ride.distance )*ride.pricePerSeat);
+      
+      
+      const seatsOk= usableSegments.every((seg) =>
+      seg.availableSeats >= seatsRequired
+      );
+      
+      
+      
+      if(seatsOk){
+
+        const pickupPoint = await reverseGeocode(ride.route.coordinates[pickIndex])
+
+        const dropPoint = await  reverseGeocode(ride.route.coordinates[dropIndex])
+
+        console.log(pickupPoint);
+        
+        
+        validrides.push({
+          ...ride,
+          pickupPoint:{
+            ...pickupPoint.result
+          },
+          dropPoint:dropPoint.result,
+          askedDist,
+          cost
+        });
+      }
+
+    }
+
+    return res.status(200).json(validrides);
     } catch (error) {
-        return res.status(500).json({
-            "message":"Error fetching rides"
-        })
-    }}
+    console.error(error);
+    return res.status(500).json({
+      message: "Error fetching rides",
+      error: error.message,
+    });
+  }
+};
 
 export const getRideById=async(req,res)=>{
 try {
@@ -342,7 +590,7 @@ try {
 
 export const getMyPublishedRides=async(req,res)=>{
     try {
-        const userId=req.user_id;
+        const userId=req.session.userId;
         
         if(!userId){
             return res.status(400).json({

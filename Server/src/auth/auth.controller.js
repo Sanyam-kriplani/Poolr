@@ -1,46 +1,11 @@
-import User from "../models/userModel.js";
+import User from "../user/userModel.js";
+import Session from "../session/sessionModel.js";
 import bcrypt from "bcrypt";
-import Session from "../models/sessionModel.js";
 import crypto from "crypto";
 import { sendMail } from "../utils/composeMail.js";
-import fs from "fs";
 
 
-
-const createUser = async (req, res) => {
-  try{
-      const { name, age, email, phone_no, password} = req.body;
-        
-        console.log(req.body);
-
-        if (!name || !email || !password) {
-      return res.status(400).json({ message: "Required fields missing" });
-    }
-    const existinguser= await User.findOne({email});
-    if(existinguser){
-        return res.status(400).json({message:"User already exists"});
-    }
-
-    const password_hash = await bcrypt.hash(password, 10);
-    const newUser = new User({
-            name,
-            age,
-            email,
-            phone_no,
-            password_hash
-        });
-
-    const savedUser = await newUser.save();
-        res.status(201).json({ message: "User created successfully", user: savedUser });
-        
-    
-    }catch(error){
-        res.status(500).json({ message: "Error creating user", error });
-    }
-}
-
-
-const M = 1000 * 60 * 60 * 24; // 1 day in milliseconds
+const M = 1000 * 60 * 60 * 24;
 
 
 const loginUser = async (req, res) => {
@@ -62,10 +27,40 @@ const loginUser = async (req, res) => {
         if(!isMatch){
             return res.status(401).json({message:"Invalid Credentials"});
         }
+         
+        // Check for any existing active session for this user
+        const activeSession = await Session.findOne({
+          userId: user._id,
+          expiresAt: { $gt: new Date() }
+        });
+
+        if (activeSession) {
+          activeSession.expiresAt = new Date(Date.now() + M);
+          await activeSession.save();
+
+          res.cookie("sid", activeSession.sid, {
+            httpOnly: true,
+            sameSite: "lax",
+            secure: false,
+            maxAge: M,
+          });
+
+          return res.status(200).json({
+            message: "Login successful",
+            user: {
+              id: user._id,
+              name: user.name,
+              email: user.email,
+            },
+          });
+        }
+
+        
         const sid = crypto.randomUUID();
         
        await Session.create({
         sid,
+        type:"LOGIN",
         userId: user._id,
         expiresAt: new Date(Date.now() + M)
         });
@@ -98,6 +93,49 @@ const loginUser = async (req, res) => {
   res.clearCookie("sid");
   res.json({ message: "Logged out" });
 };
+
+const createUser = async (req, res) => {
+  try{
+      const { name, age, email, phone_no, password} = req.body;
+      
+      console.log(req.body);
+
+      if (!name || !email || !password) {
+        return res.status(400).json({ message: "Required fields missing" });
+      }
+      const existingUser = await User.findOne({
+        $or: [{ email }, { phone_no }]
+      });
+
+      if (existingUser) {
+        if (existingUser.email === email) {
+          return res.status(409).json({ message: "Email already registered" });
+        }
+        if (existingUser.phone_no === phone_no) {
+          return res.status(409).json({ message: "Phone number already registered" });
+        }
+      }
+    
+
+    const password_hash = await bcrypt.hash(password, 10);
+    const newUser = new User({
+            name,
+            age,
+            email,
+            phone_no,
+            password_hash
+        });
+
+    const savedUser = await newUser.save();
+        res.status(201).json({ message: "User created successfully", user: savedUser });
+        
+    
+    }catch(error){
+
+        console.error("CREATE USER ERROR:", error);
+        res.status(500).json({ message: "Error creating user"});
+    }
+}
 
 const  otpSender= async (req,res)=>{
  try {
@@ -165,11 +203,11 @@ const otpVerifier= async(req,res)=>{
     
     } catch (error) {
         return res.status(500).json({message:"Error validating the Otp"})
-    }}
+}}
 
 const passUpdater= async (req,res)=>{
         try {
-            const user_id = req.user_id;
+            const user_id = req.session.userId;
             const { newPass } = req.body;
             const user=await User.findById(user_id);
     
@@ -186,97 +224,6 @@ const passUpdater= async (req,res)=>{
             } catch (error) {
             return res.status(500).json({message:"Error updating the password"})
             }
-    }
-
-const accDetailUpdater=async (req,res)=>{ 
-    try {
-    
-       const{email,phone_no}=req.body;
-       const user_id=req.user_id
-       const  user=await  User.findById(user_id);
-       
-       if(!user){
-        return res.status(404).json({ message: "User not found" });
-       }
-
-       if(email){
-        user.email=email;
-       }
-    
-       if(phone_no){
-        user.phone_no=phone_no;
-       }
-    
-       await user.save();
-       res.status(200).json({message:"Details updated Successfully"});
-       } catch (error) {
-       return res.status(500).json({message:"Error updating the details"})
-     }
-
  }
 
-const profilePhotoUpdater = async (req, res) => {
-  try {
-    const user_id = req.user_id;
-    const profilePhotoPath = req.file?.path;
-
-    if (!profilePhotoPath) {
-      return res.status(400).json({ message: "Avatar file is missing" });
-    }
-
-    const user = await User.findById(user_id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Deleting old avatar from disk (if exists)
-    if (user.profile_photo) {
-      const oldPath = user.profile_photo.startsWith("/uploads")
-        ? user.profile_photo.slice(1) // remove leading slash
-        : user.profile_photo;
-
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
-      }
-    }
-
-    // Save relative path in DB
-    user.profile_photo = "/" + profilePhotoPath.replace(/\\/g, "/");
-    await user.save();
-
-    return res.status(200).json({
-      message: "Profile photo updated successfully",
-      avatar: user.profile_photo
-    });
-  } catch (error) {
-    console.error("PROFILE PHOTO UPDATE ERROR:", error);
-    return res.status(500).json({ message: "Error updating profile photo",
-      error:error.message
-     });
-  }
-};
-
-const fetchUserDetails=async (req,res)=>{
-try {
-  const userId=req.user_id;
-  
-  const user=await User.findById(userId);
-  
-  if(!user){
-    return res.status(404).json({
-      message:"User not found"
-    });
-  }
-  return res.status(200).json(user);
-  
-} catch (error) {
- return res.status(500).json({
-  message:"Error fetching user details",
-  Error:error
-})
-}
-}
-
-
-
-export { createUser, loginUser, logoutUser, otpSender, otpVerifier, passUpdater, accDetailUpdater, profilePhotoUpdater,fetchUserDetails};
+ export  {loginUser,logoutUser,createUser, otpSender, otpVerifier, passUpdater}

@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import path from "path";
-import startRideExpiryCron from "./services/rideExpiryCron.js";
+
 
 
 
@@ -34,23 +34,27 @@ app.use(sessionMiddleware);
 
 
 //Importing Routes
-import userRoute from './routes/userRoutes.js';
-import rideRoute from './routes/rideRoutes.js';
-import bookingRoute from './routes/bookingRoutes.js'
-import vehicleRoute from './routes/vehicleRoutes.js';
-import locationRoute from './routes/locationRoutes.js'
-import reviewRoute from './routes/reviewRoutes.js';
-//Routes
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-app.use("/api/users",userRoute);
-app.use('/api/rides',rideRoute);
-app.use('/api/bookings',bookingRoute);
-app.use('/api/vehicles',vehicleRoute);
-app.use('/api/locations/',locationRoute);
-app.use('/api/reviews/',reviewRoute);
+import userRoute from './user/userRoutes.js';
+import rideRoute from './ride/rideRoutes.js';
+import bookingRoute from './booking/bookingRoutes.js'
+import vehicleRoute from './vehicle/vehicleRoutes.js';
+import locationRoute from './location/locationRoutes.js'
+import reviewRoute from './review/reviewRoutes.js';
+import authRoute from './auth/auth.routes.js';
 
-//auto expire the rides
-startRideExpiryCron();
+//Routes
+
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use('/api/auth', authRoute)
+app.use("/api/users", userRoute);
+app.use('/api/rides', rideRoute);
+app.use('/api/bookings', bookingRoute);
+app.use('/api/vehicles', vehicleRoute);
+app.use('/api/locations', locationRoute);
+app.use('/api/reviews', reviewRoute);
+
+
+
 
 export default app;
 

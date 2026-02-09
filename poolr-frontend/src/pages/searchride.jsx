@@ -18,17 +18,20 @@ import {
   Users,
   Search,
   Car,
+  Route,
+  Timer,
 } from "lucide-react";
-import { Label } from "@radix-ui/react-label";
+
 import { useNavigate } from "react-router-dom";
 
 export default function SearchRide() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [fromObj, setFromObj] = useState(null);
+  const [toObj, setToObj] = useState(null);
   const [fromSuggestions, setFromSuggestions] = useState([]);
   const [toSuggestions, setToSuggestions] = useState([]);
-  const [fromOpen, setFromOpen] = useState(false);
-  const [toOpen, setToOpen] = useState(false);
+
 
   const [fromSelected, setFromSelected] = useState(false);
   const [toSelected, setToSelected] = useState(false);
@@ -102,19 +105,42 @@ export default function SearchRide() {
       setLoading(true);
       setError("");
 
-      const query = new URLSearchParams({
-        source: from,
-        destination: to,
-        seatsRequired,
-        departureDate,
-      }).toString();
+      const sourceObj={
+        name:fromObj.city,
+        location:{
+        type:"Point",
+        coordinates:[
+        fromObj.longitude,
+        fromObj.latitude
+        ]}
+        }
+      const destinationObj={
+        name:toObj.city,
+        location:{
+          type:"Point",
+          coordinates:
+          [
+            toObj.longitude,
+            toObj.latitude
+          ]
+      }
+    }
 
       const res = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/api/rides/search?${query}`,
+        `${import.meta.env.VITE_API_BASE_URL}/api/rides/search`,
         {
-          method: "GET",
+          method: "POST",
           credentials: "include",
-        }
+          headers:{
+          "Content-Type":"application/json"
+        },
+        body:JSON.stringify({
+          source:sourceObj,
+          destination:destinationObj,
+          seatsRequired,
+          departureDate
+        })
+        }    
       );
 
       const data = await res.json();
@@ -126,6 +152,7 @@ export default function SearchRide() {
       }
 
       setRides(data || []);
+      console.log(data)
       setLoading(false);
     } catch (err) {
       setError("Something went wrong while searching rides");
@@ -153,6 +180,7 @@ export default function SearchRide() {
                         value={from}
                         onChange={(e) => {
                           setFrom(e.target.value);
+                          setFromObj(null);
                           setFromSelected(false);
                         }}
                         onBlur={() => {
@@ -179,7 +207,8 @@ export default function SearchRide() {
                             key={loc._id || loc.id || loc.name || JSON.stringify(loc)}
                             onMouseDown={(e) => {
                               e.preventDefault();
-                              setFrom(loc.name || loc.city || loc.label || loc);
+                              setFrom(loc.name || loc.city || loc.label || "");
+                              setFromObj(loc);
                               setFromSuggestions([]);
                               setFromSelected(true);
                             }}
@@ -202,6 +231,7 @@ export default function SearchRide() {
                         value={to}
                         onChange={(e) => {
                           setTo(e.target.value);
+                          setToObj(null);
                           setToSelected(false);
                         }}
                         onBlur={() => {
@@ -228,7 +258,8 @@ export default function SearchRide() {
                             key={loc._id || loc.id || loc.name || JSON.stringify(loc)}
                             onMouseDown={(e) => {
                               e.preventDefault();
-                              setTo(loc.name || loc.city || loc.label || loc);
+                              setTo(loc.name || loc.city || loc.label || "");
+                              setToObj(loc);
                               setToSuggestions([]);
                               setToSelected(true);
                             }}
@@ -263,7 +294,7 @@ export default function SearchRide() {
 
               <Button
                 className="px-8"
-                disabled={!fromSelected || !toSelected || !departureDate}
+                disabled={!fromObj || !toObj || !departureDate}
                 onClick={handleSearchRides}
               >
                 <Search className="mr-2 h-4 w-4" />
@@ -315,10 +346,20 @@ export default function SearchRide() {
     </div>
   );
 }
+const formatDuration = (seconds) => {
+  if (!seconds) return "—";
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.round((seconds % 3600) / 60);
+
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
+};
 
 function RideCard({ ride }) {
   const navigate = useNavigate();
-  const driver = ride.driverId;
+  const driver = ride.driver;
 
   const date = new Date(ride.departureDateTime);
   const time = date.toLocaleTimeString("en-IN", {
@@ -368,19 +409,31 @@ function RideCard({ ride }) {
         {/* CENTER: Ride Details */}
         <div className="flex flex-col gap-1 text-sm sm:col-span-1">
           <p className="font-medium">
-            {ride.source} → {ride.destination}
+            {ride?.source?.name} → {ride?.destination?.name}
           </p>
 
-          <div className="flex items-center gap-4 text-muted-foreground text-xs">
+          <div className="flex items-center flex-wrap gap-4 text-muted-foreground text-xs">
             <span>⏰ {time}</span>
             <span>💺 {ride.totalAvailableSeats} seats</span>
+
+            <span className="flex items-center gap-1">
+              <Route className="h-3.5 w-3.5" />
+              {ride.askedDist
+                ? `${(ride.askedDist / 1000).toFixed(1)} km`
+                : "—"}
+            </span>
+
+            <span className="flex items-center gap-1">
+              <Timer className="h-3.5 w-3.5" />
+              {formatDuration(ride.duration)}
+            </span>
           </div>
         </div>
 
         {/* RIGHT: Price */}
         <div className="text-left sm:text-right lg:text-right">
           <p className="text-xl sm:text-2xl font-bold text-primary leading-none">
-            ₹{ride.pricePerSeat}
+            ₹{ride.cost}
           </p>
           <p className="text-xs text-muted-foreground">
             per seat

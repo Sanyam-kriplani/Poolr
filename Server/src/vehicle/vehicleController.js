@@ -1,9 +1,9 @@
-import User from "../models/userModel.js";
-import Vehicle from "../models/vehicleModel.js";
+import User from "../user/userModel.js";
+import Vehicle from "../vehicle/vehicleModel.js";
 
 export const addVehicle= async (req,res)=>{
     try {
-        const driverId=req.user_id;
+        const driverId=req.session.userId;
         console.log(driverId);
         const{brand, model, registrationNo, color}=req.body;
 
@@ -19,7 +19,7 @@ export const addVehicle= async (req,res)=>{
         });
         if(existingVehicle){
             return res.status(400).json({
-                message:"Vehicle with this is registrationNo already exists"
+                message:"Vehicle with this is Registration Number already exists"
             })
         }
 
@@ -54,7 +54,7 @@ export const deleteVehicle= async (req,res)=>{
     try {
         const { id }=req.params;
         
-        const userId=req.user_id;
+        const userId=req.session.userId;
     
         if(!id){
             return res.status(400).json({
@@ -84,29 +84,9 @@ export const deleteVehicle= async (req,res)=>{
     }
 }
 
-// export const getMyVehicles= async(req,res)=>{
-//     try {
-//         const driverId=req.user_id;
-    
-//         const myVehicles=await Vehicle.find({driverId});
-    
-//         if(typeof(myVehicles)===undefined || myVehicles.length===0){
-//             return res.status(404).json({
-//                 message:"No vehicles found, please add a vehicle first."
-//             });
-//         }
-    
-//         return res.status(200).json({myVehicles});
-//     } catch (error) {
-//         return res.status(500).json({
-//             message:"Error fetching vehicles"
-//         })
-//     }
-// }
-
 export const getVehicleByDriverId= async(req,res)=>{
     try {
-        const driverId=req.user_id;
+        const driverId=req.session.userId;
     
     
         const vehicle = await Vehicle.findOne({ driverId, isActive: true });

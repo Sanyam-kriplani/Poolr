@@ -29,7 +29,7 @@ export default function Navbar() {
     const logoutHandler=()=>{
       const logout=async()=>{
         try {
-          const response=await fetch(import.meta.env.VITE_API_BASE_URL + "/api/users/",{
+          const response=await fetch(import.meta.env.VITE_API_BASE_URL + "/api/auth/",{
             method:"DELETE",
             credentials:"include"
           });
@@ -49,7 +49,7 @@ export default function Navbar() {
         <div className="flex items-center gap-2">
           {/* Replace src with your asset later */}
           
-          <span className="text-xl font-bold tracking-tight cursor-pointer" onClick={()=>{navigate("/dashboard")}} >
+          <span className="text-xl font-bold tracking-tight cursor-pointer" onClick={()=>{navigate("/")}} >
             Poolr
           </span>
         </div>

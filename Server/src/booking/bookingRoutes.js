@@ -1,7 +1,8 @@
-import { createBooking, bookingCancellar,bookingConfirmation, getMybookings, getBookingById, getBookingRequests } from "../controllers/bookingController.js";
+import { createBooking, bookingCancellar,bookingConfirmation, getMybookings, getBookingById, getBookingRequests } from "../booking/bookingController.js";
 import express from 'express';
 import { sessionMiddleware } from "../middlewares/sessionMiddleware.js";
 import { authenticateUser } from "../middlewares/authMiddleware.js";
+
 
 const bookingRoute= express.Router();
 

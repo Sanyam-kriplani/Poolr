@@ -1,5 +1,5 @@
 import { log } from "console";
-import Session from "../models/sessionModel.js";
+import Session from "../session/sessionModel.js";
 
 //Session Middleware
 

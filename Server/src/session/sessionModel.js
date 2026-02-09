@@ -9,6 +9,11 @@ const sessionSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  type:{
+    type:String,
+    enum: ["LOGIN", "PASSWORD_RESET"],
+    default: "upcoming"
+  },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
@@ -16,7 +21,8 @@ const sessionSchema = new mongoose.Schema({
   },
   expiresAt: {
     type: Date
-  }
+  },
+  session: Object,
 }, { timestamps: true });
 
 const Session = mongoose.model("Session", sessionSchema);

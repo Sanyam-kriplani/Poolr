@@ -6,6 +6,21 @@ import { Input } from "@/components/ui/input";
 import { Star, Users } from "lucide-react";
 import { useState, useEffect } from "react";
 
+import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+
+// Fix Leaflet marker icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
 export default function ViewRide() {
   const { state } = useLocation();
   const navigate = useNavigate();
@@ -14,9 +29,9 @@ export default function ViewRide() {
   const [seatsBooked, setSeatsBooked] = useState("");
   const [bookingMessage, setBookingMessage] = useState("");
 
-  
 
   const ride = state?.ride;
+  console.log(ride)
 
  const sendBookingRequest = async () => {
   if (!seatsBooked || seatsBooked <= 0) {
@@ -93,6 +108,21 @@ export default function ViewRide() {
     );
   }
 
+  // 📍 Source & destination coords (GeoJSON → Leaflet)
+  const sourceCoords = [
+    ride.source.location.coordinates[1],
+    ride.source.location.coordinates[0],
+  ];
+
+  const destinationCoords = [
+    ride.destination.location.coordinates[1],
+    ride.destination.location.coordinates[0],
+  ];
+
+  // 🛣️ Route polyline from backend (GeoJSON → Leaflet)
+  const routePolyline =
+    ride?.route?.coordinates?.map(([lng, lat]) => [lat, lng]) || [];
+
   const driver = ride.driverId;
   const date = new Date(ride.departureDateTime);
   const time = date.toLocaleTimeString("en-IN", {
@@ -111,7 +141,7 @@ export default function ViewRide() {
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16">
               <AvatarImage
-                src={`${import.meta.env.VITE_API_BASE_URL}${driver?.profile_photo}`}
+                src={`${import.meta.env.VITE_API_BASE_URL}${ride.driver.profile_photo}`}
               />
               <AvatarFallback>
                 {driver?.name?.charAt(0)}
@@ -120,14 +150,14 @@ export default function ViewRide() {
 
             <div>
               <p className="font-semibold text-lg">
-                {driver?.name}
+                {ride.driver?.name}
               </p>
               <p className="text-sm text-muted-foreground">
-                Age {driver?.age}
+                Age {ride.driver?.age}
               </p>
               <div className="flex items-center gap-1 text-sm mt-1">
                 <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                <span>{driver?.rating ?? "N/A"}</span>
+                <span>{ride.driver?.rating ?? "N/A"}</span>
               </div>
             </div>
           </div>
@@ -135,7 +165,7 @@ export default function ViewRide() {
           {/* Ride details */}
           <div className="space-y-1 text-sm">
             <p className="font-medium text-base">
-              {ride.source} → {ride.destination}
+              {ride?.source?.name} → {ride?.destination?.name}
             </p>
             <p className="text-muted-foreground">
               Departure time: {time}
@@ -155,6 +185,39 @@ export default function ViewRide() {
             </p>
           </div>
 
+        </CardContent>
+      </Card>
+
+      {/* ROUTE MAP */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Route Overview</CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          <div className="h-[350px] w-full overflow-hidden rounded-lg">
+            <MapContainer
+              center={sourceCoords}
+              zoom={12}
+              scrollWheelZoom={false}
+              className="h-full w-full"
+            >
+              <TileLayer
+                attribution='&copy; OpenStreetMap contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+
+              <Marker position={sourceCoords} />
+              <Marker position={destinationCoords} />
+
+              {routePolyline.length > 0 && (
+                <Polyline
+                  positions={routePolyline}
+                  pathOptions={{ color: "#2563eb", weight: 4 }}
+                />
+              )}
+            </MapContainer>
+          </div>
         </CardContent>
       </Card>
 

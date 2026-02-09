@@ -1,4 +1,4 @@
-import Location from "../models/locationModel.js"
+import Location from "./locationModel.js"
 
 export const searchLocation = async (req, res) => {
   try {

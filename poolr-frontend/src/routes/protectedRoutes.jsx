@@ -11,7 +11,7 @@ export default function ProtectedRoutes({ children }) {
     const checkAuth = async () => {
       try {
         const response = await fetch(
-          import.meta.env.VITE_API_BASE_URL + "/api/users/auth-test",
+          import.meta.env.VITE_API_BASE_URL + "/api/auth/auth-test",
           {
             method: "GET",
             credentials: "include",

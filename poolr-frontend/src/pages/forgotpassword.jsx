@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { CheckCircle2 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -13,12 +14,15 @@ export default function Forgotpass() {
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState("email"); 
   const [message, setMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass,setConfirmPass] = useState("");
   const navigate=useNavigate();
 
 
   const handleChange = (e) => {
+    setMessage("");
+    setSuccessMessage("");
     setEmail(e.target.value);
   };
 
@@ -38,7 +42,7 @@ export default function Forgotpass() {
     console.log("Email: ", email);
 
     try {
-      const response = await fetch(import.meta.env.VITE_API_BASE_URL+'/api/users/forgotpass', {
+      const response = await fetch(import.meta.env.VITE_API_BASE_URL+'/api/auth/forgotpass', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -52,7 +56,8 @@ export default function Forgotpass() {
 
       const result = await response.json();
 
-      setMessage("OTP sent successfully to your email");
+      setSuccessMessage("OTP has been sent to your email");
+      setMessage("");
       setStep("otp");
       console.log(result);
     } catch (error) {
@@ -71,7 +76,7 @@ export default function Forgotpass() {
 
     try {
       const response = await fetch(
-        import.meta.env.VITE_API_BASE_URL + "/api/users/verifyOtp",
+        import.meta.env.VITE_API_BASE_URL + "/api/auth/verifyOtp",
         {
           method: "POST",
           credentials: "include",
@@ -88,6 +93,7 @@ export default function Forgotpass() {
 
       const result = await response.json();
       setMessage("OTP verified successfully");
+      setSuccessMessage("");
       setStep("resetpass");
       console.log(result.cookie);
     } catch (error) {
@@ -110,7 +116,7 @@ export default function Forgotpass() {
 
     try {
       const response = await fetch(
-        import.meta.env.VITE_API_BASE_URL + "/api/users/resetPass",
+        import.meta.env.VITE_API_BASE_URL + "/api/auth/resetPass",
         {
           method: "PATCH",
           credentials:"include",
@@ -162,6 +168,13 @@ export default function Forgotpass() {
                 Send OTP
               </Button>
             </form>
+          )}
+
+          {successMessage && (
+            <div className="mb-4 flex items-center gap-2 rounded-md border border-green-500 bg-green-50 p-3 text-sm text-green-600">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span className="font-medium">{successMessage}</span>
+            </div>
           )}
 
           {step === "otp" && (

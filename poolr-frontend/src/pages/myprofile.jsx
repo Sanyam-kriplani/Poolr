@@ -123,14 +123,16 @@ export default function MyProfile() {
            },
            body: JSON.stringify(vehicleDetails),
          });
+         const data = await response.json();
+
          if (!response.ok) {
            setVehicleSuccess(false);
-           setVehicleMsg("Error updating details");
+           setVehicleMsg(data?.message || "Error updating vehicle details");
          } else {
            setVehicleSuccess(true);
-           setVehicleMsg("Vehicle details updated successfully");
+           setVehicleMsg(data?.message || "Vehicle details updated successfully");
 
-           // ✅ keep vehicle context in sync
+           // to keep vehicle context in sync
            setUserVehicle((prev) => ({
              ...prev,
              ...vehicleDetails,
@@ -175,12 +177,13 @@ export default function MyProfile() {
            },
            body: JSON.stringify(accDetails),
          });
+         const data = await response.json();
          if (!response.ok) {
            setAccountSuccess(false);
-           setAccountMsg("Error updating details");
-         } else {
+           setAccountMsg(data?.message || "Error updating account details");
+         }else{
            setAccountSuccess(true);
-           setAccountMsg("Account details updated successfully");
+           setAccountMsg(data?.message || "Account details updated successfully");
            console.log(response.error);
          }
        } catch (error) {

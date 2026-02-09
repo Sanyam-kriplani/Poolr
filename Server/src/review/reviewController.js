@@ -1,12 +1,12 @@
-import Review from '../models/reviewModel.js'
-import Ride from '../models/rideModel.js'
-import User from '../models/userModel.js'
+import Review from '../review/reviewModel.js'
+import Ride from '../ride/rideModel.js'
+import User from '../user/userModel.js'
 
 
 
 export const postReview= async (req,res)=>{
     try {
-        const passengerId=req.user_id;
+        const passengerId=req.session.userId;
         const {rideId,rating,remarks}= req.body;
     
         if(!rideId){

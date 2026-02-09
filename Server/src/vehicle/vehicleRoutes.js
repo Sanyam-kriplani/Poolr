@@ -1,5 +1,5 @@
 import express from 'express';
-import { addVehicle, deleteVehicle, getVehicleByDriverId } from '../controllers/vehicleController.js';
+import { addVehicle, deleteVehicle, getVehicleByDriverId } from '../vehicle/vehicleController.js';
 import { sessionMiddleware } from '../middlewares/sessionMiddleware.js';
 import { authenticateUser } from '../middlewares/authMiddleware.js';
 

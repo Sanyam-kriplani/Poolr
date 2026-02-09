@@ -6,8 +6,11 @@ import { Separator } from "@/components/ui/separator";
 import {
   Popover,
   PopoverContent,
-    PopoverAnchor,
+  PopoverAnchor,
 } from "@/components/ui/popover";
+import { MapContainer, TileLayer, Polyline, CircleMarker } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import polyline from "@mapbox/polyline";
 
 import {
   Command,
@@ -25,19 +28,8 @@ import {
   Car,
 } from "lucide-react";
 
-import {
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-  AlertDialogAction,
-} from "@/components/ui/alert-dialog";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUserVehicle } from "@/context/userVehicleContext.jsx";
 
@@ -52,8 +44,20 @@ export default function PublishRide() {
   const [rideDetails,setRideDetails]=useState({});
   const navigate=useNavigate();
 
+  const [showWaypointsStep, setShowWaypointsStep] = useState(false);
+  const [availableWaypoints, setAvailableWaypoints] = useState([]);
+  const [selectedWaypoints, setSelectedWaypoints] = useState([]);
+  const [waypointsLoading, setWaypointsLoading] = useState(false);
+
+  const routeDetails=useRef(null);
+  const [route, setRoute] = useState(null);
+  const [showMap, setShowMap] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
   const [message, setMessage] = useState("");
   const { userVehicle } = useUserVehicle();
+  const [routeStale, setRouteStale] = useState(false);
+  
   
 
   useEffect(() => {
@@ -80,6 +84,7 @@ export default function PublishRide() {
         }
 
         const results = await response.json();
+        console.log(results.data);
         setSourceResults(results.data || []);
       } catch (error) {
         console.error("Source search error:", error);
@@ -125,77 +130,237 @@ export default function PublishRide() {
 
 
   const handleSourceChange = (e) => {
-    const {id,value}=e.target;
+    const { id, value } = e.target;
     setSourceInput(value);
-    setRideDetails((prev)=>({
-        ...prev,
-        [id]: value
+
+    setRideDetails((prev) => ({
+      ...prev,
+      [id]: value,
     }));
+
+    if (showMap) {
+      setRouteStale(true);
+    }
   };
 
   const handleDestinationChange = (e) => {
-    const {id,value}=e.target;
+    const { id, value } = e.target;
     setDestinationInput(value);
-    setRideDetails((prev)=>({
-        ...prev,
-        [id]: value
+    
+    setRideDetails((prev) => ({
+      ...prev,
+      [id]: value,
     }));
+
+    if (showMap) {
+      setRouteStale(true);
+    }
   };
 
-  const handleRidePublish = () => {
-  if (!userVehicle?._id) {
-    setMessage("Please add a vehicle first");
-    return;
-  }
-
-  const { departureDate, departureTime } = rideDetails;
-  const combinedDate = new Date(`${departureDate}T${departureTime}:00`);
-  const formattedDateTime = combinedDate
-    .toISOString()
-    .replace("Z", "+00:00");
-
-  const payload = {
-    ...rideDetails,
-    departureDateTime: formattedDateTime,
-    vehicleId: userVehicle?._id,
-  };
-
-  console.log(payload);
-
-  const publish = async () => {
+  const handleNext = async () => {
     try {
-      const response = await fetch(
-        import.meta.env.VITE_API_BASE_URL + "/api/rides/",
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      let data = {};
-      try {
-        data = await response.json();
-      } catch {}
-
-      if (!response.ok) {
-        setMessage(data?.message || "Error publishing ride");
+      if (!rideDetails?.source || !rideDetails?.destination) {
+        setMessage("Please select source and destination first");
         return;
       }
 
-      setMessage(data?.message || "Ride published successfully");
-      navigate("/my-published-rides");
-    } catch (error) {
-      setMessage("Error publishing ride", error);
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/rides/getRideRoute`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: rideDetails.source,
+            destination: rideDetails.destination,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMessage(data.message || "Failed to generate route");
+        return;
+      }
+
+      routeDetails.current = data;
+      
+      setRoute(polyline.decode(data.polyline)); // [[lat,lng]]
+      setShowMap(true);
+      setRouteStale(false);
+      setShowWaypointsStep(false);
+      setAvailableWaypoints([]);
+      setSelectedWaypoints([]);
+      setMessage("");
+    } catch (err) {
+      console.error(err);
+      setMessage("Error generating route preview");
     }
   };
-  publish();
+
+// const leafletToGeoJSONRoute = (polyline) => ({
+//   coordinates: polyline.map(([lat, lng]) => [lng, lat]),
+// });
+
+const handleFetchWaypoints = async () => {
+  try {
+    setWaypointsLoading(true);
+
+    const response = await fetch(
+      `${import.meta.env.VITE_API_BASE_URL}/api/rides/getRideWayPoints`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: rideDetails.source,
+          destination: rideDetails.destination,
+          routePolyline: routeDetails.current.polyline,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setMessage(data?.message || "Failed to fetch waypoints");
+      return;
+    }
+
+    const lastIndex = route.length - 1;
+
+    const sorted = [...(data.waypoints || [])]
+      .filter(
+        (wp) =>
+          wp.routePointIndex !== 0 &&
+          wp.routePointIndex !== lastIndex
+      )
+      .sort((a, b) => (b.importance || 0) - (a.importance || 0));
+
+    setAvailableWaypoints(sorted);
+    setShowWaypointsStep(true);
+  } catch (err) {
+    console.error(err);
+    setMessage("Error fetching waypoints");
+  } finally {
+    setWaypointsLoading(false);
+  }
 };
 
-  return (
+const addWaypoint = (wp) => {
+  if (selectedWaypoints.some(w => w.routePointIndex === wp.routePointIndex)) {
+    return;
+  }
+  setSelectedWaypoints(prev => [...prev, wp]);
+};
+
+const removeWaypoint = (index) => {
+  setSelectedWaypoints(prev => prev.filter((_, i) => i !== index));
+};
+
+
+  const handleRidePublish = () => {
+    if (routeStale) {
+      setMessage("Please refetch the route after changing source or destination");
+      return;
+    }
+    if (!userVehicle?._id) {
+      setMessage("Please add a vehicle first");
+      return;
+    }
+
+    const { departureDate, departureTime } = rideDetails;
+    const combinedDate = new Date(`${departureDate}T${departureTime}:00`);
+    const formattedDateTime = combinedDate
+      .toISOString()
+      .replace("Z", "+00:00");
+
+    const finalWaypoints =
+          [
+            {
+              name: rideDetails.source.name,
+              location: rideDetails.source.location,
+              routePointIndex: 0,
+            },
+            ...selectedWaypoints,
+            {
+              name: rideDetails.destination.name,
+              location: rideDetails.destination.location,
+              routePointIndex: route.length - 1,
+            },
+          ];
+
+    const payload = {
+      ...rideDetails,
+      routePolyline: routeDetails.current.polyline,
+      distance: routeDetails.current.distance,
+      duration: routeDetails.current.duration,
+      waypoints: finalWaypoints,
+      departureDateTime: formattedDateTime,
+      vehicleId: userVehicle?._id,
+    };
+
+    console.log(payload);
+
+    const publish = async () => {
+      try {
+        const response = await fetch(
+          import.meta.env.VITE_API_BASE_URL + "/api/rides/",
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch {}
+
+        if (!response.ok) {
+          setMessage(data?.message || "Error publishing ride");
+          return;
+        }
+
+        setMessage(data?.message || "Ride published successfully");
+        navigate("/my-published-rides");
+      } catch (error) {
+        setMessage("Error publishing ride", error);
+      }
+    };
+    publish();
+  };
+
+  // --- Distance & Duration formatters ---
+  const formatDistance = (meters) => {
+    if (!meters) return "";
+    return meters >= 1000
+      ? `${(meters / 1000).toFixed(1)} km`
+      : `${meters} m`;
+  };
+
+  const formatDuration = (seconds) => {
+    if (!seconds) return "";
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins} min`;
+  };
+
+
+
+  return (<form
+    onSubmit={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }}
+  >
     <div className="min-h-screen bg-muted/40 py-10">
       <div className="mx-auto max-w-3xl px-6 space-y-8">
 
@@ -258,10 +423,19 @@ export default function PublishRide() {
                           key={r._id}
                           onSelect={() => {
                             setSkipSourceSearch(true);
-                            setSourceInput(r.city);
+                            const sourceObj={
+                              name:r.city,
+                              location:{
+                              type:"Point",
+                              coordinates:[
+                                r.longitude,
+                                r.latitude
+                              ]}
+                            }
+                            setSourceInput(sourceObj.name);
                             setRideDetails((prev)=>({
                             ...prev,
-                            source:r.city
+                            source:sourceObj
                             }));
                             setSourceResults([]);
                           }}
@@ -314,10 +488,19 @@ export default function PublishRide() {
                           key={r._id}
                           onSelect={() => {
                             setSkipDestinationSearch(true);
-                            setDestinationInput(r.city);
+                            const destinationObj={
+                              name:r.city,
+                              location:{
+                              type:"Point",
+                              coordinates:[
+                                r.longitude,
+                                r.latitude
+                              ]}
+                            }
+                            setDestinationInput(destinationObj.name);
                             setRideDetails((prev)=>({
                             ...prev,
-                            destination:r.city
+                            destination:destinationObj
                             }));
                             setDestinationResults([]);
                           }}
@@ -472,39 +655,173 @@ export default function PublishRide() {
               </div>
             )}
 
-            {/* SUBMIT */}
+            {showMap && route && (
+              <div className="md:col-span-2 space-y-3">
+                {/* Distance & Duration */}
+                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 rounded-md border px-3 py-1">
+                    <span className="font-medium">Distance:</span>
+                    <span>
+                      {formatDistance(routeDetails.current?.distance)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-md border px-3 py-1">
+                    <span className="font-medium">Estimated time:</span>
+                    <span>
+                      {formatDuration(routeDetails.current?.duration)}
+                    </span>
+                  </div>
+                </div>
+                {/* Map */}
+                <div className="h-[400px] rounded-md overflow-hidden">
+                  <MapContainer
+                    center={route[0]}
+                    zoom={7}
+                    className="h-full w-full"
+                    scrollWheelZoom={false}
+                    keyboard={false}
+                  >
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"   
+                    />
+                    <Polyline positions={route} />
+                    {/* Selected Waypoint Markers */}
+                    {selectedWaypoints.map((wp, i) => {
+                      const point = route[wp.routePointIndex];
+                      if (!point) return null;
+
+                      return (
+                        <CircleMarker
+                          key={i}
+                          center={point}
+                          radius={6}
+                          pathOptions={{
+                            color: "#16a34a",      // green border
+                            fillColor: "#22c55e",  // green fill
+                            fillOpacity: 0.9,
+                          }}
+                        />
+                      );
+                    })}
+
+                    {/* Source Marker */}
+                    <CircleMarker
+                      center={route[0]}
+                      radius={7}
+                      pathOptions={{
+                        color: "#2563eb",
+                        fillColor: "#3b82f6",
+                        fillOpacity: 1,
+                      }}
+                    />
+
+                    {/* Destination Marker */}
+                    <CircleMarker
+                      center={route[route.length - 1]}
+                      radius={7}
+                      pathOptions={{
+                        color: "#dc2626",
+                        fillColor: "#ef4444",
+                        fillOpacity: 1,
+                      }}
+                    />
+                  </MapContainer>
+                </div>
+              </div>
+            )}
+            {showMap && !showWaypointsStep && !routeStale && (
+              <div className="md:col-span-2 flex justify-end">
+                <Button type="button" onClick={handleFetchWaypoints}>
+                  {waypointsLoading ? "Loading..." : "Add Waypoints (Optional)"}
+                </Button>
+              </div>
+            )}
+
+            {showMap && routeStale && (
+              <div className="md:col-span-2 flex justify-between items-center">
+                <p className="text-sm text-muted-foreground">
+                  Source or destination changed. Route may be outdated.
+                </p>
+                <Button type="button" variant="outline" onClick={handleNext}>
+                  Refetch Route
+                </Button>
+              </div>
+            )}
+
+              {showWaypointsStep && (
+                <div className="md:col-span-2 space-y-4">
+                  <h3 className="font-semibold">Suggested Waypoints</h3>
+
+                  <div className="flex flex-wrap gap-2">
+                    {availableWaypoints.map((wp, i) => (
+                      <Button
+                        key={i}
+                        type="button"
+                        variant="outline"
+                        onClick={() => addWaypoint(wp)}
+                      >
+                        {wp.name}
+                        {wp.importance >= 4 && (
+                          <span className="ml-2 text-xs text-green-600 font-medium">
+                            Recommended
+                          </span>
+                        )}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {selectedWaypoints.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Selected Waypoints</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedWaypoints.map((wp, i) => (
+                          <span
+                            key={i}
+                            className="flex items-center gap-1 rounded-full border px-3 py-1 text-sm"
+                          >
+                            {wp.name}
+                            <button
+                              type="button"
+                              className="ml-1"
+                              onClick={() => removeWaypoint(i)}
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
             <div className="md:col-span-2 flex justify-end pt-4">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button className="px-8">Publish Ride</Button>
-                </AlertDialogTrigger>
+            {!showMap && (
+              <Button
+            type="button"
+            className="px-8"
+            onClick={handleNext}>
+            Next
+          </Button>
+            )}
 
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Publish this ride?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Once published, passengers will be able to view and book this ride.
-                      Please confirm before proceeding.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleRidePublish}
-                      className="bg-primary text-primary-foreground hover:bg-primary/90"
-                    >
-                      Yes, Publish
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
+          {showMap && (
+            <Button
+              type="button"
+              className="px-8"
+              onClick={handleRidePublish}
+              disabled={routeStale}
+            >
+              Publish Ride
+            </Button>
+          )}
+        </div>
 
           </CardContent>
         </Card>
 
       </div>
     </div>
+    </form>
   );
 }

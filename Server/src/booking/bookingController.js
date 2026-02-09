@@ -1,14 +1,14 @@
-import Booking from "../models/bookingModel.js";
-import Ride from "../models/rideModel.js";
-import User from "../models/userModel.js";
-import Location from "../models/locationModel.js";
+import Booking from "./bookingModel.js";
+import Ride from "../ride/rideModel.js";
+import User from "../user/userModel.js";
+import Location from "../location/locationModel.js";
 import { sendMail } from "../utils/composeMail.js";
 import mongoose from "mongoose";
 
 
 export const createBooking= async(req,res)=>{
     try {
-        const passengerId=req.user_id;
+        const passengerId=req.session.userId;
         const {rideId,seatsBooked}=req.body;
          const ride=await Ride.findById(rideId);
          if(!ride){
@@ -66,7 +66,7 @@ export const createBooking= async(req,res)=>{
           });
         }
 
-console.log("Driver upcoming rides:", debugRides);
+
     
         const existingBooking=await Booking.findOne({rideId,passengerId});
         if(existingBooking){
@@ -115,8 +115,8 @@ export const bookingCancellar = async (req, res) => {
     }
 
     if (
-      booking.passengerId.toString() !== req.user_id.toString() &&
-      booking.driverId.toString() !== req.user_id.toString()
+      booking.passengerId.toString() !== req.session.userId.toString() &&
+      booking.driverId.toString() !== req.session.userId.toString()
     ) {
       return res.status(403).json({
         message: "You are not authorized to cancel this booking",
@@ -146,7 +146,7 @@ export const bookingCancellar = async (req, res) => {
 export const bookingConfirmation=async (req,res)=>{
    try {
      const bookingId=req.body._id;
-     const driverId=req.user_id;
+     const driverId=req.session.userId;
      if(!bookingId){
          return res.status(400).json({
              message:"bookingId is required"
@@ -190,8 +190,8 @@ export const bookingConfirmation=async (req,res)=>{
  
      const passenger=await User.findById(booking.passengerId);
  
-     const pickup=await Location.findOne({city:ride.source});
-     const drop= await Location.findOne({city:ride.destination});
+     const pickup=await Location.findOne({city:ride.source.name});
+     const drop= await Location.findOne({city:ride.destination.name});
      
  
      await sendMail({to: passenger.email,
@@ -256,7 +256,7 @@ export const bookingConfirmation=async (req,res)=>{
 
 export const getMybookings = async (req, res) => {
   try {
-    const userId = req.user_id;
+    const userId = req.session.userId;
 
     if (!userId) {
       return res.status(400).json({
@@ -291,7 +291,7 @@ export const getMybookings = async (req, res) => {
 
 export const getBookingById= async (req,res)=>{
     try {
-        const userId=req.user_id;
+        const userId=req.session.userId;
         const { id }=req.params;
         if(!id){
             return res.status(400).json({
@@ -312,7 +312,7 @@ export const getBookingById= async (req,res)=>{
             });
         }
 
-        if (!booking.passengerId.equals(req.user_id)) {
+        if (!booking.passengerId.equals(req.session.userId)) {
         return res.status(403).json({
          message: "You are not authorized to view this Booking"
         });

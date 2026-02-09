@@ -115,7 +115,7 @@ export default function MyBookings() {
               <CardTitle className="flex items-center justify-between">
                 <span>
                   {booking.rideId
-                    ? `${booking.rideId.source} → ${booking.rideId.destination}`
+                    ? `${booking.rideId.source.name} → ${booking.rideId.destination.name}`
                     : "Ride details unavailable"}
                 </span>
 
