@@ -26,12 +26,13 @@ export default function ViewRide() {
   const navigate = useNavigate();
   const [passengers,setPassengers]=useState([]);
   const [passengerMessage,setPassengerMessage]=useState("");
-  const [seatsBooked, setSeatsBooked] = useState("");
+  const [seatsBooked, setSeatsBooked] = useState(state?.seats || "");
   const [bookingMessage, setBookingMessage] = useState("");
 
 
   const ride = state?.ride;
-  console.log(ride)
+  const askedSeats = state?.seats;
+  console.log("Asked seats in view ride:", askedSeats);
 
  const sendBookingRequest = async () => {
   if (!seatsBooked || seatsBooked <= 0) {
@@ -51,6 +52,9 @@ export default function ViewRide() {
         body: JSON.stringify({
           rideId: ride._id,
           seatsBooked: Number(seatsBooked),
+          pickupPoint: ride.pickupPoint,
+          dropPoint: ride.dropPoint,
+          RequestedPrice: ride.cost      
         }),
       }
     );
@@ -119,9 +123,42 @@ export default function ViewRide() {
     ride.destination.location.coordinates[0],
   ];
 
-  // 🛣️ Route polyline from backend (GeoJSON → Leaflet)
+  // 📍 Pickup & Drop points (GeoJSON → Leaflet)
+  const pickupCoords = ride?.pickupPoint
+    ? [
+        ride.pickupPoint.location.coordinates[1],
+        ride.pickupPoint.location.coordinates[0],
+      ]
+    : null;
+
+  const dropCoords = ride?.dropPoint
+    ? [
+        ride.dropPoint.location.coordinates[1],
+        ride.dropPoint.location.coordinates[0],
+      ]
+    : null;
+
+  // 📌 Waypoints (GeoJSON → Leaflet)
+  const waypointCoords =
+    ride?.waypoints?.map((wp) => [
+      wp.location.coordinates[1],
+      wp.location.coordinates[0],
+    ]) || [];
+
+  // 🛣️ Full route polyline from backend (road-following)
   const routePolyline =
     ride?.route?.coordinates?.map(([lng, lat]) => [lat, lng]) || [];
+
+  // Map icons
+  const sourceIcon = new L.Icon.Default();
+  const destinationIcon = new L.Icon.Default();
+  const waypointIcon = new L.Icon.Default();
+
+  // Auto-fit map to route
+  const bounds =
+    routePolyline.length > 0
+      ? routePolyline
+      : [sourceCoords, destinationCoords];
 
   const driver = ride.driverId;
   const date = new Date(ride.departureDateTime);
@@ -171,14 +208,14 @@ export default function ViewRide() {
               Departure time: {time}
             </p>
             <p className="text-muted-foreground">
-              Seats available: {ride.totalAvailableSeats}
+              Seats available: {ride.availableSeats}
             </p>
           </div>
 
           {/* Price */}
           <div className="text-right">
             <p className="text-2xl font-bold text-primary">
-              ₹{ride.pricePerSeat}
+              ₹{ride.cost}
             </p>
             <p className="text-xs text-muted-foreground">
               per seat
@@ -197,7 +234,7 @@ export default function ViewRide() {
         <CardContent>
           <div className="h-[350px] w-full overflow-hidden rounded-lg">
             <MapContainer
-              center={sourceCoords}
+              bounds={bounds}
               zoom={12}
               scrollWheelZoom={false}
               className="h-full w-full"
@@ -207,13 +244,26 @@ export default function ViewRide() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
-              <Marker position={sourceCoords} />
-              <Marker position={destinationCoords} />
+              <Marker position={sourceCoords} icon={sourceIcon} />
+
+              {pickupCoords && (
+                <Marker position={pickupCoords} icon={waypointIcon} />
+              )}
+
+              {dropCoords && (
+                <Marker position={dropCoords} icon={waypointIcon} />
+              )}
+
+              <Marker position={destinationCoords} icon={destinationIcon} />
 
               {routePolyline.length > 0 && (
                 <Polyline
                   positions={routePolyline}
-                  pathOptions={{ color: "#2563eb", weight: 4 }}
+                  pathOptions={{
+                    color: "#2563eb",
+                    weight: 4,
+                    opacity: 0.9,
+                  }}
                 />
               )}
             </MapContainer>
@@ -277,10 +327,10 @@ export default function ViewRide() {
           <Input
             type="number"
             min="1"
-            max={ride.totalAvailableSeats}
+            max={ride.availableSeats}
             placeholder="Number of seats"
             className="sm:max-w-[200px]"
-            value={seatsBooked}
+            value={askedSeats}
             onChange={(e) => setSeatsBooked(e.target.value)}
           />
 

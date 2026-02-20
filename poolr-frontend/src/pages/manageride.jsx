@@ -649,6 +649,15 @@ useEffect(()=>{ if (initialRide?._id) {
                     <p className="text-sm text-muted-foreground">
                       Seats requested: {req.seatsBooked}
                     </p>
+                    <p className="text-sm text-muted-foreground">
+                      Pickup: <span className="font-medium">{req.pickupPoint?.city || "N/A"}</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Drop: <span className="font-medium">{req.dropPoint?.city || "N/A"}</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Requested Price: <span className="font-medium">₹{req.RequestedPrice ?? "-"}</span>
+                    </p>
                   </div>
                 </div>
 

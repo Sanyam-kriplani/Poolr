@@ -430,10 +430,8 @@ export const searchRides = async (req, res) => {
     searchDate.setHours(0, 0, 0, 0);
 
      // if searching for today, start from NOWW
-    const lowerBound =
-    searchDate.toDateString() === today.toDateString()
-    ? today
-    : searchDate;
+    const lowerBound=searchDate.toDateString()===today.toDateString()?today :searchDate;
+
 //============== making a tolerance of 2 km around destination ==================
     const dropBuffer = {
         type: "Polygon",
@@ -515,11 +513,14 @@ export const searchRides = async (req, res) => {
       
       const cost=Math.ceil((askedDist / ride.distance )*ride.pricePerSeat);
       
-      
+      let minSeatsInSegments=Infinity;
       const seatsOk= usableSegments.every((seg) =>
-      seg.availableSeats >= seatsRequired
-      );
+      {
+        minSeatsInSegments = Math.min(minSeatsInSegments, seg.availableSeats)
+        return  seg.availableSeats >= seatsRequired
+      });
       
+      console.log("minSeatsInSegments",minSeatsInSegments);
       
       
       if(seatsOk){
@@ -538,7 +539,8 @@ export const searchRides = async (req, res) => {
           },
           dropPoint:dropPoint.result,
           askedDist,
-          cost
+          cost,
+          availableSeats:minSeatsInSegments
         });
       }
 

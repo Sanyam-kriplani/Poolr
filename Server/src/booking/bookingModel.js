@@ -25,8 +25,51 @@ const bookingSchema = new mongoose.Schema({
         type: String ,
         enum: ["pending", "confirmed","cancelled"],
         default: "pending",   
+    },
+    pickupPoint:{
+        "city": String,
+        "location": {
+            "type": {
+                "type": String,
+                "enum": ["Point"],
+                "default": "Point"
+            },
+            "coordinates": {
+                "type": [Number], // [lng, lat]
+                "required": true
+            }
+        }
+    },
+    dropPoint:{
+        city: {
+            type: String,
+        },
+        "location": {
+            "type": {
+                "type": String,
+                "enum": ["Point"],
+                "default": "Point"
+            },
+            "coordinates": {
+                "type": [Number], // [lng, lat]
+                "required": true
+            }
+        }   
+    },
+    RequestedPrice:{
+        type:Number,
+        required:true   
+    },
+    StartSegmentFromIndex:{
+        type:Number,
+        required:true
+    },
+    EndSegmentToIndex:{
+        type:Number,
+        required:true
     }
-},{ timestamps: true });
+    }
+    ,{ timestamps: true });
 
 const Booking = mongoose.model('Booking', bookingSchema);
 

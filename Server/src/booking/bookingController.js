@@ -9,7 +9,7 @@ import mongoose from "mongoose";
 export const createBooking= async(req,res)=>{
     try {
         const passengerId=req.session.userId;
-        const {rideId,seatsBooked}=req.body;
+        const {rideId,seatsBooked,pickupPoint, dropPoint, RequestedPrice}=req.body;
          const ride=await Ride.findById(rideId);
          if(!ride){
           return res.status(404).json({
@@ -78,12 +78,36 @@ export const createBooking= async(req,res)=>{
                 message:"seatsBooked is required"
             })
         }
-    
+
+       const startWP=ride.waypoints.filter((point)=>{
+        if(point.name.toLowerCase()===pickupPoint.city.toLowerCase()){
+          return true;
+        }
+       });
+ 
+       const endWP=ride.waypoints.filter((point)=>{
+        if(point.name.toLowerCase()===dropPoint.city.toLowerCase()){
+          return true;
+        }
+       });
+
+       const [startSegment,endSegment]=ride.segments.filter((segment)=>{
+        if(segment.fromIndex===startWP[0].routePointIndex || segment.toIndex===endWP[0].routePointIndex){
+          return true;
+        }
+       });
+
+
         const booking=new Booking({
             rideId,
             driverId:ride.driverId,
             passengerId,
-            seatsBooked
+            seatsBooked,
+            pickupPoint,
+            dropPoint,
+            StartSegmentFromIndex:startSegment.fromIndex,
+            EndSegmentToIndex:endSegment.toIndex,
+            RequestedPrice
         });
     
         const savedBooking=await booking.save();
@@ -181,8 +205,24 @@ export const bookingConfirmation=async (req,res)=>{
          )
      }
 
+     let isAvailable=true;
+
+     for(let i=0;i<ride.segments.length;i++){
+      if(ride.segments[i].availableSeats < booking.seatsBooked){
+        isAvailable=false;
+        break;
+      }
+     }
      
+     if(!isAvailable){
+        bookingCancellar(booking._id);
+        return res.status(400).json({
+            message:"Not enough seats available to confirm this booking"
+        })
+     }
  
+
+
      const driver=await User.findById(driverId);
 
      console.log(ride);
@@ -190,8 +230,9 @@ export const bookingConfirmation=async (req,res)=>{
  
      const passenger=await User.findById(booking.passengerId);
  
-     const pickup=await Location.findOne({city:ride.source.name});
-     const drop= await Location.findOne({city:ride.destination.name});
+     const pickup=req.pickupPoint?.city;
+     const drop= req.dropPoint?.city;
+     
      
  
      await sendMail({to: passenger.email,
@@ -209,8 +250,8 @@ export const bookingConfirmation=async (req,res)=>{
 
       <h3>🚘 Ride Details</h3>
       <ul>
-        <li><strong>Pickup:</strong> ${pickup.city}, ${pickup.state}</li>
-        <li><strong>Drop:</strong> ${drop.city}, ${drop.state}</li>
+        <li><strong>Pickup:</strong> ${pickup}</li>
+        <li><strong>Drop:</strong> ${drop}</li>
         <li><strong>Seats Booked:</strong> ${booking.seatsBooked}</li>
         <li><strong>Departure Time:</strong> ${ride.departureTime}</li>
       </ul>
@@ -228,12 +269,20 @@ export const bookingConfirmation=async (req,res)=>{
     </div>
   `});
      
-     ride.totalAvailableSeats -= booking.seatsBooked;
+      let start = 0;
+      let end = 0;
+      for(let  i=0;i<ride.segments.length;i++){
+        if(ride.segments[i].fromIndex===booking.StartSegmentFromIndex){
+            start=i;
+        }
+        if(ride.segments[i].toIndex===booking.EndSegmentToIndex){
+            end=i;
+        }
+      }
 
-     if(ride.totalAvailableSeats===0){
-        ride.isAvailable=false;
-     }
-
+     for(let i=start;i<=end;i++){
+        ride.segments[i].availableSeats-=booking.seatsBooked;
+     }    
 
      ride.passengers.push(passenger._id);
      await ride.save();
@@ -245,8 +294,7 @@ export const bookingConfirmation=async (req,res)=>{
      
  
    } catch (error) {
-       console.log(error);
-
+    console.log(error);
     return res.status(500).json({
         message:"Error in booking confirmation",
         error:error.message

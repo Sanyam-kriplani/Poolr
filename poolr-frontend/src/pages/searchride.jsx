@@ -337,7 +337,7 @@ export default function SearchRide() {
         {!loading && rides.length > 0 && (
           <div className="space-y-4">
             {rides.map((ride) => (
-              <RideCard key={ride._id} ride={ride} />
+              <RideCard key={ride._id} ride={ride} seats={seatsRequired} />
             ))}
           </div>
         )}
@@ -357,7 +357,7 @@ const formatDuration = (seconds) => {
   return `${minutes}m`;
 };
 
-function RideCard({ ride }) {
+function RideCard({ ride,seats }) {
   const navigate = useNavigate();
   const driver = ride.driver;
 
@@ -370,7 +370,7 @@ function RideCard({ ride }) {
   return (
     <Card
       className="border hover:shadow-md transition cursor-pointer"
-      onClick={() => navigate(`/view-ride`, { state: { ride } })}
+      onClick={() => navigate(`/view-ride`, { state: { ride,seats } })}
     >
       <CardContent className="
         grid gap-4 px-4 py-4

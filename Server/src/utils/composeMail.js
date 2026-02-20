@@ -16,7 +16,7 @@ const transporter = nodemailer.createTransport({
 
 export async function sendMail({ to, sub, msg }) {
     console.log("MAIL_USER:", process.env.MAIL_USER);
-console.log("MAIL_PASS EXISTS:", !!process.env.MAIL_PASS);
+    console.log("MAIL_PASS EXISTS:", !!process.env.MAIL_PASS);
     return await transporter.sendMail({
         from: process.env.MAIL_USER,
         to,
