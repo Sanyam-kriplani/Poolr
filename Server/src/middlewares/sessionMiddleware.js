@@ -1,4 +1,4 @@
-import { log } from "console";
+
 import Session from "../session/sessionModel.js";
 
 //Session Middleware
@@ -6,9 +6,7 @@ import Session from "../session/sessionModel.js";
 export const sessionMiddleware= async (req,res,next)=>{
     try {
         
-        if(req.method==="OPTIONS"){
-            return next();
-        }
+
         // console.log(req.cookies);
         const sid = req.cookies?.sid;
         // console.log(sid);

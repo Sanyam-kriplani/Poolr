@@ -25,7 +25,7 @@ app.use(cors({
 
 // Basic Middlewarews
 app.use(express.json());
-app.use(cookieParser());
+app.use(cookieParser());//
 
 //Session Middleware
 import { sessionMiddleware } from "./middlewares/sessionMiddleware.js";

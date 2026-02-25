@@ -1,6 +1,6 @@
-import Navbar from "@/components/navbar.jsx";
-import { UserProvider } from "@/context/userContext.jsx";
-import { UserVehicleProvider } from "@/context/userVehicleContext.jsx";
+import Navbar from "@/components/layout/navbar.jsx";
+import { UserProvider } from "@/store/userContext.jsx";
+import { UserVehicleProvider } from "@/store/userVehicleContext.jsx";
 import { Outlet } from "react-router-dom";
 
 

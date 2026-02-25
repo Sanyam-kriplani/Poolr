@@ -28,8 +28,8 @@ import {
   AlertCircle,
   CheckCircle,
 } from "lucide-react";
-import { useUser } from "@/context/userContext.jsx";
-import { useUserVehicle } from "@/context/userVehicleContext.jsx";
+import { useUser } from "@/store/userContext.jsx";
+import { useUserVehicle } from "@/store/userVehicleContext.jsx";
 
 export default function MyProfile() {
 

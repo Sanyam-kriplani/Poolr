@@ -91,11 +91,25 @@ export const createBooking= async(req,res)=>{
         }
        });
 
-       const [startSegment,endSegment]=ride.segments.filter((segment)=>{
-        if(segment.fromIndex===startWP[0].routePointIndex || segment.toIndex===endWP[0].routePointIndex){
-          return true;
-        }
-       });
+       if (!startWP.length || !endWP.length) {
+         return res.status(400).json({
+           message: "Invalid pickup or drop point"
+         });
+       }
+
+       const startSegment = ride.segments.find(
+         segment => segment.fromIndex === startWP[0].routePointIndex
+       );
+
+       const endSegment = ride.segments.find(
+         segment => segment.toIndex === endWP[0].routePointIndex
+       );
+
+       if (!startSegment || !endSegment) {
+         return res.status(400).json({
+           message: "Invalid route segments for pickup/drop"
+         });
+       }
 
 
         const booking=new Booking({
@@ -230,8 +244,8 @@ export const bookingConfirmation=async (req,res)=>{
  
      const passenger=await User.findById(booking.passengerId);
  
-     const pickup=req.pickupPoint?.city;
-     const drop= req.dropPoint?.city;
+     const pickup = booking.pickupPoint?.city;
+     const drop = booking.dropPoint?.city;
      
      
  
@@ -253,7 +267,7 @@ export const bookingConfirmation=async (req,res)=>{
         <li><strong>Pickup:</strong> ${pickup}</li>
         <li><strong>Drop:</strong> ${drop}</li>
         <li><strong>Seats Booked:</strong> ${booking.seatsBooked}</li>
-        <li><strong>Departure Time:</strong> ${ride.departureTime}</li>
+        <li><strong>Departure Time:</strong> ${ride.departureDateTime}</li>
       </ul>
 
       <p>
@@ -319,7 +333,7 @@ export const getMybookings = async (req, res) => {
       })
       .populate({
         path: "driverId",
-        select: "name phone_no rating age",
+        select: "name phone_no profile_photo rating age",
       });
 
     if (!bookings || bookings.length === 0) {

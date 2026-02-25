@@ -11,6 +11,7 @@ export default function MyBookings() {
   const [openReviewId, setOpenReviewId] = useState(null);
   const [submittedReviews, setSubmittedReviews] = useState({});
 
+
   const handleSubmitReview = async (booking) => {
     try {
       const reviewData = submittedReviews[booking._id];
@@ -115,7 +116,7 @@ export default function MyBookings() {
               <CardTitle className="flex items-center justify-between">
                 <span>
                   {booking.rideId
-                    ? `${booking.rideId.source.name} → ${booking.rideId.destination.name}`
+                    ? `${booking.pickupPoint.city} → ${booking.dropPoint.city}`
                     : "Ride details unavailable"}
                 </span>
 
@@ -136,7 +137,7 @@ export default function MyBookings() {
             <CardContent className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <Avatar>
-                  <AvatarImage src={booking.driverId?.avatar} />
+                  <AvatarImage src={`${import.meta.env.VITE_API_BASE_URL}${booking.driverId?.profile_photo}`} />
                   <AvatarFallback>
                     {booking.driverId?.name?.trim()?.[0]}
                   </AvatarFallback>
@@ -166,9 +167,9 @@ export default function MyBookings() {
                 ) : (
                   <p>—</p>
                 )}
-                {booking.rideId?.pricePerSeat && (
+                {booking.RequestedPrice && (
                   <p className="font-medium text-foreground">
-                    ₹{booking.rideId.pricePerSeat} / seat
+                    ₹{booking.RequestedPrice} / seat
                   </p>
                 )}
               </div>

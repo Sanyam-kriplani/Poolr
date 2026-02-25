@@ -17,7 +17,7 @@ import {
   User,
 } from "lucide-react";
 
-import { useUser } from "@/context/userContext.jsx";
+import { useUser } from "@/store/userContext.jsx";
 
 import { useNavigate } from "react-router-dom";
 

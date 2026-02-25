@@ -28,7 +28,8 @@ const loginUser = async (req, res) => {
             return res.status(401).json({message:"Invalid Credentials"});
         }
          
-        // Check for any existing active session for this user
+        // Check for any existing active session for this user to handle dangling sessions caused by multiple logins
+
         const activeSession = await Session.findOne({
           userId: user._id,
           expiresAt: { $gt: new Date() }
@@ -44,7 +45,7 @@ const loginUser = async (req, res) => {
             secure: false,
             maxAge: M,
           });
-
+          
           return res.status(200).json({
             message: "Login successful",
             user: {

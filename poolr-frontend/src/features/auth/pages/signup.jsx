@@ -13,90 +13,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
-
+import { useSignup } from "@/features/auth/hooks/useSignup";
 
 export default function Signup() { 
-  const [message,setMessage]=useState(''); 
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    age:18,
-    phone_no: "",
-    password: "",
-  });
-  const [open,setOpen]=useState();
   const navigate=useNavigate();
-
-  const [errors, setErrors] = useState({});
-
-  const handleChange = (e) => {
-    const value =
-    e.target.type === "number"
-    ? Number(e.target.value)
-    : e.target.value;
-     
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.id]:value,
-    }));
-  };
-
-  const validate = () => {
-    const newErrors = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = "Name is required";
-    }
-
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    }
-
-    if (!formData.age || Number(formData.age) < 18) {
-      newErrors.age = "Age must be 18 or above";
-    }
-
-    if (!/^[6-9]\d{9}$/.test(formData.phone_no)) {
-      newErrors.phone_no = "Enter a valid 10-digit phone number";
-    }
-
-    if (formData.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!validate()) return;
-
-    console.log("Signup data:", formData);
-
-    try {
-      const response = await fetch(import.meta.env.VITE_API_BASE_URL+'/api/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Something went wrong');
-      }
-
-      const result = await response.json();
-      setMessage('User successfully added!');
-      setOpen(true);
-      console.log(result);
-    } catch (error) {
-      setMessage('Error posting data');
-      console.error('Error:', error);
-    }
-  };
+  const {formData,handleChange,handleSubmit,open,setOpen,errors,message}=useSignup();
+  if(open){
+    navigate("/login");
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">

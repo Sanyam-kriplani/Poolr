@@ -7,8 +7,9 @@ export const authenticateUser = (req, res, next) => {
   
   // PASSWORD_RESET session restrictions
   if (req.session.type === "PASSWORD_RESET") {
+    
     // Allow only reset password related routes
-    if (req.originalURL==='/api/auth/resetPass') {
+    if (req.originalUrl!=='/api/auth/resetPass') {
       return res.status(403).json({ message: "Reset session only" });
     }
 

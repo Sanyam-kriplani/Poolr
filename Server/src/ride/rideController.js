@@ -404,6 +404,9 @@ export const rideCancellar=async (req,res)=>{
         }
 ride.status = "cancelled";
 await ride.save();
+return res.status(200).json({
+    message:"Ride has been cancelled successfully and passengers have been notified"
+})
     } catch (error) {
         console.log(error);
         res.status(500).json({

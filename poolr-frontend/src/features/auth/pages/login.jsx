@@ -6,80 +6,13 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
+import { useLogin } from "@/features/auth/hooks/useLogin";
 
 
 export default function Login() { 
-  const [message,setMessage]=useState(''); 
-  const [formData, setFormData] = useState({
-    email: "",
-    password: ""
-  });
+  
   const navigate=useNavigate();
-
-  const [errors, setErrors] = useState({});
-  const [authError, setAuthError] = useState("");
-
-  const handleChange = (e) => {
-    setAuthError("");
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.id]:e.target.value,
-    }));
-  };
-
-  const validate = () => {
-    const newErrors = {};
-
-
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    }
-
-    if (formData.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!validate()) return;
-
-    console.log("Login data:", formData);
-
-    try {
-      const response = await fetch(import.meta.env.VITE_API_BASE_URL+'/api/auth/login', {
-        method: 'POST',
-        credentials:"include",
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.status === 401) {
-        setAuthError("Invalid email or password");
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error('Something went wrong');
-      }
-
-      const result = await response.json();
-      setAuthError("");
-
-      setMessage('User successfully logged in!');
-      navigate("/")
-      console.log(result);
-    } catch (error) {
-      setMessage('Error posting data');
-      console.error('Error:', error);
-    }
-  };
+  const {message, errors, authError, handleChange, handleSubmit, formData, setAuthError}=useLogin();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
